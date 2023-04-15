@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from loguru import logger
 from dotenv import load_dotenv
 from os.path import join, dirname
-from Face_Recognition.FaceClass import load_model,save_model
+from Face_Recognition.FaceClass import load_model,save_model,get_encoding_dummy_data
 import sqlite3
 
 
@@ -32,7 +32,6 @@ app = FastAPI(
     #redoc_url=None
 )
 
-
 class rt_building(BaseModel):
     building_id : int = Field(..., title="building_id", description="building id for new building", example= 123)
 
@@ -48,7 +47,6 @@ class ACK(BaseModel):
 class BuildingInfo(BaseModel):
     name : str = Field(...,  title="name", description="name of person", example= "farzad")
     isalert : bool = Field(..., title="isalert", description="alert on/off", example= True)
-    alerttype : str = Field(..., title="alerttype", description="type of alert", example= "all alert")
     alertEmail : str = Field(...,  title="alertEmail", description="Email for alerts", example= "farzad@gmail.com")
 
 class ResidentInfo(BaseModel):
@@ -170,7 +168,7 @@ def Add_resident(
         conn.rollback()
         conn.close()
         return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
-    return JSONResponse(status_code=200,content={"resident_id":123})
+    return JSONResponse(status_code=200,content={"resident_id":RESIDENT_ID})
 
 @app.delete("/admin/remove_resident", summary="remove people from building", response_model=ACK)
 def remove_resident(
@@ -178,10 +176,42 @@ def remove_resident(
         building_id : int = Header(..., description= "Id of Building"),
         resident_id : int = Header(..., description= "Id of Resident")
         ):
+    conn = db_connection()
+    # if not check_session(conn,session_token):
+    #     conn.close()
+    #     return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+    try:
+        # delete from RESIDENT_DETAILS table
+        sql = f"""DELETE FROM RESIDENT_DETAILS WHERE RESIDENT_ID={resident_id}"""
+        conn.execute(sql)
+
+        ## delete from model
+        cur = conn.cursor()
+        cur.execute(f"SELECT * FROM IMAGE_INDEX where RESIDENT_ID ='{resident_id}'")
+        rows = cur.fetchall()
+
+        model = load_model()
+        for row in rows:
+            index = row['IMAGE_ID']
+            model.face_encodings[index] = get_encoding_dummy_data()
+        save_model(model)
+
+        # delete from IMAGE_INDEX table
+        sql = f"""DELETE FROM IMAGE_INDEX WHERE RESIDENT_ID={resident_id}"""
+        conn.execute(sql)
+        conn.commit()
+        conn.close()
+
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+
     return JSONResponse(status_code=200,content={"ACK":"Deleted"})
 
 @app.put('/admin/Add_building', summary="add new building", response_model=rt_building)
-def Add_resident(
+def Add_building(
         BuildingInfo: BuildingInfo ,
         session_token: str = Header(..., description= "token for the admin functions")
         ):

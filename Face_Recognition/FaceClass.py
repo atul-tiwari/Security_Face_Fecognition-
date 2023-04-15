@@ -41,3 +41,7 @@ def load_model():
     with open("Face_Model.obj",'rb') as f:
         model = pickle.load(f)
         return model
+
+def get_encoding_dummy_data():
+    with open("Dummy_face_encoding.obj",'rb') as f:
+        return pickle.load(f)

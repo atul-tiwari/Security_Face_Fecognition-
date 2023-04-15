@@ -19,3 +19,4 @@ __pycache__
 csv*
 *.log
 realis
+*.ipynb
