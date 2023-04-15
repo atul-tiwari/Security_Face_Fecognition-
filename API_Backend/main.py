@@ -109,7 +109,7 @@ def get_session(
         else:
             time_now = datetime.now() 
             valid_till = time_now + timedelta(minutes=10)
-            conn.execute(f"""INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL)VALUES('{time_now.strftime("%Y-%m-%d %H:%M:%S")}', '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}')""")
+            conn.execute(f"""INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL, USER_NAME)VALUES('{time_now.strftime("%Y-%m-%d %H:%M:%S")}', '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}','{admin_user}')""")
             row_id = conn.execute("select last_insert_rowid() as id").fetchall()    
             session_token = dict(row_id[0])['id']
             conn.commit()
