@@ -18,7 +18,7 @@ import sqlite3
 import traceback
 import os
 
-logger.add(".\API Backend\log\EveSpy_API.log", rotation="100MB", retention="1 year")
+logger.add(".\API_Backend\log\API.log", rotation="100MB", retention="1 year")
 
 dot_env_path = join(dirname(__file__), '.env')
 load_dotenv(dot_env_path)
