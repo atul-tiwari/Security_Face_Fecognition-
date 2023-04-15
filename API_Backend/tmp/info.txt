@@ -1,0 +1,2 @@
+this folder is for API to store images as temp
+after program trains the mode on new faces the API will delete the images

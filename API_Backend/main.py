@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import uvicorn
+import shutil
 from fastapi import FastAPI, Query, Request, status, Response, Header, Body, File, UploadFile
 from pydantic import BaseModel, Field
 from datetime import datetime,timedelta
@@ -81,7 +82,7 @@ def check_session(conn,session_token):
             valid_till = datetime.now() + timedelta(minutes=10)
             conn.execute(f"""UPDATE SESSION_DETAIL SET VALID_TILL = '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}' WHERE SESSION_ID={session_token}""")
             conn.commit()
-            
+
             return True
         else:
             return False
@@ -105,17 +106,20 @@ def get_session(
         cur.execute(f"SELECT * FROM USER_DETAILS where USER_NAME='{admin_user}' and PASSWORD='{adminm_password}'")
         rows = cur.fetchall()
         if rows == []:
+            conn.close()
             return JSONResponse(status_code=404,content={"massage":"Invalid Credentials"})
         else:
             time_now = datetime.now() 
             valid_till = time_now + timedelta(minutes=10)
             conn.execute(f"""INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL)VALUES('{time_now.strftime("%Y-%m-%d %H:%M:%S")}', '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}')""")
-            data = conn.execute("select last_insert_rowid() as id").fetchall()    
-            session_token = dict(data[0]['id'])
+            row_id = conn.execute("select last_insert_rowid() as id").fetchall()    
+            session_token = dict(row_id[0])['id']
             conn.commit()
             conn.close()
     except sqlite3.Error as error:
         logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
         return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
     
     return JSONResponse(status_code=200,content={"session_token":session_token})
@@ -126,13 +130,46 @@ def Add_resident(
         session_token: str = Header(..., description= "token for the admin functions")
         ):
     try:
-        connection = sqlite3.connect("sqllite3.db")
-        model = load_model()
+        conn = db_connection()
+        if not check_session(conn,session_token):
+            conn.close()
+            return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+        sql = f"""INSERT INTO RESIDENT_DETAILS (NAME, BUILDING_ID, HOUSE_NO)VALUES('{User.name}', {User.building_id}, {User.appartment_no})"""
+        conn.execute(sql)
+        row_id = conn.execute("select last_insert_rowid() as id").fetchall()    
+        RESIDENT_ID = dict(row_id[0])['id']
+        conn.commit()
+        
+        #downloading the images 
+        tmp_dir_path = dirname(__file__) + f'\\tmp\\{RESIDENT_ID}' 
+        os.mkdir(tmp_dir_path)
+        image_count=1
+        image_path_list = []
+        for image in User.images:
+            image_path_list.append(f"{tmp_dir_path}\\{image_count}.jpg")
+            with open(f"{tmp_dir_path}\\{image_count}.jpg",'wb') as tmp_file:
+                tmp_file.writelines(eval(image))
+            image_count+=1
 
+        #Opencv work
+        model = load_model()
+        ids = model.train_faces(image_path_list)
+        save_model(model)
+
+        # storing_model_id to database
+        for _id in ids:
+            sql = f"""INSERT INTO IMAGE_INDEX(IMAGE_ID, RESIDENT_ID)VALUES({_id} , {RESIDENT_ID});"""
+            conn.execute(sql)
+        
+        conn.commit()
+        conn.close()
+        shutil.rmtree(tmp_dir_path)
 
     except sqlite3.Error as error:
         logger.error("Error in add_resident function",error,traceback.print_exc())
-    
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
     return JSONResponse(status_code=200,content={"resident_id":123})
 
 @app.delete("/admin/remove_resident", summary="remove people from building", response_model=ACK)
