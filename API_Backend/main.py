@@ -243,14 +243,53 @@ def Add_building(
 def list_building(
         session_token: str = Header(..., description= "token for the admin functions"),
         ):
-    return JSONResponse(status_code=200,content= {"list_building":[{'name':'abc','id':123},{'name':'xyz','id':456}]} )
+    try:
+        conn = db_connection()
+        if not check_session(conn,session_token):
+            conn.close()
+            return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+
+        sql = f"""select USER_NAME from SESSION_DETAIL WHERE SESSION_ID = {session_token}"""
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        user_name = rows[0]['USER_NAME']
+        sql = f"""select * from BUILDING_DETAILS WHERE AUTH_USER = '{user_name}'"""
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        list_building = [dict(x) for x in rows]
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+    
+    return JSONResponse(status_code=200,content= {"list_building":list_building} )
 
 @app.get('/admin/list_resident', summary="list of all resident",response_model=rt_ResidentInfo)
 def list_resident(
         session_token: str = Header(..., description= "token for the admin functions"),
-        building_id : int = Header(..., description= "Id of Building")
         ):
-    return JSONResponse(status_code=200,content= {"list_resident":[{'name':'abc','build_id':123,'appart_id':69},{'name':'xyz','build_id':456,'appart_id':96}]} )
+    try:
+        conn = db_connection()
+        if not check_session(conn,session_token):
+            conn.close()
+            return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+        
+        sql = f"""SELECT rd.* from BUILDING_DETAILS bd inner join RESIDENT_DETAILS rd 
+                on bd.BUILDING_ID = rd.BUILDING_ID 
+                where bd.AUTH_USER = (select USER_NAME from SESSION_DETAIL WHERE SESSION_ID = {session_token})"""
+        cur = conn.cursor()
+        cur.execute(sql)
+        rows = cur.fetchall()
+        list_resident = [dict(x) for x in rows]
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+    return JSONResponse(status_code=200,content= {"list_resident": list_resident})
 
 @app.get('/my-endpoint')
 async def my_endpoint(request: Request):
