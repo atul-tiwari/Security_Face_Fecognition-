@@ -20,3 +20,6 @@ csv*
 *.log
 realis
 *.ipynb
+
+*.obj
+*.db

@@ -27,7 +27,7 @@ APP_ENV = os.environ.get("APP_ENV")
 app = FastAPI(
     title='EyeSpy',
     description='Control API',
-    version='0.1.1'
+    version='1.0.1'
     #docs_url=None, 
     #redoc_url=None
 )
