@@ -89,10 +89,49 @@ def check_session(conn,session_token):
 
 @app.post('/api/SecurityCheck', summary="Security Check Endpoint", response_model=ACK)
 def SecurityCheck(
-        building_id: str = Header(..., description= "Id of Building"),
+        camera_ip: str = Header(..., description= "ip of camera"),
         face_image: str = Header(..., description= "image of the face")     
         ):
-    return JSONResponse(status_code=200,content={"Access Granted":face_image})
+    try:
+        conn = db_connection()
+        cur = conn.cursor()
+        cur.execute(f"SELECT AUTH_BUILDING_ID from CAMERA_INDEX where CAM_IP='{camera_ip}'")
+        rows = cur.fetchall()
+        if rows == []:
+            conn.close()
+            return JSONResponse(status_code=500,content={"ACK":"Invalid Camera"})
+        
+        building_id = rows[0]['AUTH_BUILDING_ID']
+        
+        tmp_img_path = dirname(__file__) + f'\\tmp\\{camera_ip}_{building_id}.jpg'
+        with open(tmp_img_path,'wb') as tmp_file:
+            tmp_file.writelines(eval(face_image))
+        
+        model = load_model()
+        face_id = model.check_face(tmp_img_path)
+
+        if face_id == None:
+
+            return JSONResponse(status_code=200,content={"ACK":"Access denied"})
+        else:
+            sql = f"""select * from IMAGE_INDEX ii inner join RESIDENT_DETAILS rd 
+                        on ii.RESIDENT_ID = rd.RESIDENT_ID 
+                        where ii.IMAGE_ID = {face_id} and rd.BUILDING_ID = {building_id}"""
+            cur = conn.cursor()
+            cur.execute(sql)
+            rows = cur.fetchall()
+            if rows == []:
+                return JSONResponse(status_code=200,content={"ACK":"Access denied (STAKLER -_- )"})
+            else:
+                os.remove(tmp_img_path)
+               
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+    
+    return JSONResponse(status_code=200,content={"ACK":"Access Granted"})
     
 @app.get('/api/get_session', summary="get the access token for the admin functions",response_model=rt_session)
 def get_session(       
