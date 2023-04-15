@@ -2,13 +2,15 @@
 import uvicorn
 from fastapi import FastAPI, Query, Request, status, Response, Header, Body, File, UploadFile
 from pydantic import BaseModel, Field
-from typing import Annotated
+from datetime import datetime,timedelta
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 from dotenv import load_dotenv
 from os.path import join, dirname
+from Face_Recognition.FaceClass import load_model,save_model
 import sqlite3
+
 
 #conn = sqlite3.connect('sqllite3.db')
 
@@ -60,6 +62,17 @@ class rt_BuildingInfo(BaseModel):
 class rt_ResidentInfo(BaseModel):
     list_resident : list[ResidentInfo]
 
+def db_connection():
+    connection = sqlite3.connect("sqllite3.db")
+    connection.row_factory = sqlite3.Row
+    return connection
+
+def update_session(conn):
+    cursor = conn.execute("")
+
+def check_session(conn):
+    cursor = conn.execute(f"INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL) VALUES('', '');")
+
 
 @app.post('/api/SecurityCheck', summary="Security Check Endpoint", response_model=ACK)
 def SecurityCheck(
@@ -70,16 +83,42 @@ def SecurityCheck(
     
 @app.get('/api/get_session', summary="get the access token for the admin functions",response_model=rt_session)
 def get_session(       
-        admin_user: str = Header(..., description= "Id of Building"),
-        adminm_password: str = Header(..., description= "API Access Token")
+        admin_user: str = Header(..., description= "user name"),
+        adminm_password: str = Header(..., description= "password")
         ):
-    return JSONResponse(status_code=200,content={"session_token":"ABC123"})
+    try:
+        conn = db_connection()
+        cur = conn.cursor()
+        cur.execute(f"SELECT * FROM USER_DETAILS where USER_NAME='{admin_user}' and PASSWORD='{adminm_password}'")
+        rows = cur.fetchall()
+        if rows == []:
+            return JSONResponse(status_code=404,content={"massage":"Invalid Credentials"})
+        else:
+            time_now = datetime.now() 
+            valid_till = time_now + timedelta(minutes=10)
+            conn.execute(f"""INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL)VALUES('{time_now.strftime("%Y-%m-%d %H:%M:%S")}', '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}')""")
+            data = conn.execute("select last_insert_rowid() as id").fetchall()    
+            session_token = dict(data[0]['id'])
+            conn.close()
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+    
+    return JSONResponse(status_code=200,content={"session_token":session_token})
 
 @app.put('/admin/Add_resident', summary="add new people to an building", response_model=rt_resident)
 def Add_resident(
         User: ResidentInfo,
         session_token: str = Header(..., description= "token for the admin functions")
         ):
+    try:
+        connection = sqlite3.connect("sqllite3.db")
+        model = load_model()
+
+
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+    
     return JSONResponse(status_code=200,content={"resident_id":123})
 
 @app.delete("/admin/remove_resident", summary="remove people from building", response_model=ACK)

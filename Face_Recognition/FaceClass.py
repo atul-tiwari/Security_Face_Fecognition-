@@ -37,7 +37,7 @@ def save_model(FaceClassOBJ):
     with open("Face_Model.obj",'wb') as f:
         pickle.dump(FaceClassOBJ,f)
 
-def load_model(FaceClassOBJ):
+def load_model():
     with open("Face_Model.obj",'rb') as f:
         model = pickle.load(f)
         return model
