@@ -67,11 +67,24 @@ def db_connection():
     connection.row_factory = sqlite3.Row
     return connection
 
-def update_session(conn):
-    cursor = conn.execute("")
+def check_session(conn,session_token):
+    cur = conn.cursor()
+    cur.execute(f"SELECT * FROM SESSION_DETAIL where SESSION_ID ='{session_token}'")
+    rows = cur.fetchall()
+    if rows == []:
+        return False
+    else:
+        VALID_TILL = dict(rows[0])['VALID_TILL']
+        if datetime.strptime(VALID_TILL,"%Y-%m-%d %H:%M:%S") > datetime.now():
 
-def check_session(conn):
-    cursor = conn.execute(f"INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL) VALUES('', '');")
+            # update the session token
+            valid_till = datetime.now() + timedelta(minutes=10)
+            conn.execute(f"""UPDATE SESSION_DETAIL SET VALID_TILL = '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}' WHERE SESSION_ID={session_token}""")
+            conn.commit()
+            
+            return True
+        else:
+            return False
 
 
 @app.post('/api/SecurityCheck', summary="Security Check Endpoint", response_model=ACK)
@@ -99,6 +112,7 @@ def get_session(
             conn.execute(f"""INSERT INTO SESSION_DETAIL (CREATED_AT, VALID_TILL)VALUES('{time_now.strftime("%Y-%m-%d %H:%M:%S")}', '{valid_till.strftime("%Y-%m-%d %H:%M:%S")}')""")
             data = conn.execute("select last_insert_rowid() as id").fetchall()    
             session_token = dict(data[0]['id'])
+            conn.commit()
             conn.close()
     except sqlite3.Error as error:
         logger.error("Error in add_resident function",error,traceback.print_exc())
