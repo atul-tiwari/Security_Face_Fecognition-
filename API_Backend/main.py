@@ -45,8 +45,9 @@ class ACK(BaseModel):
     status : str = Field(..., title="status", description="status of request", example= "Failure")
 
 class BuildingInfo(BaseModel):
-    name : str = Field(...,  title="name", description="name of person", example= "farzad")
-    isalert : bool = Field(..., title="isalert", description="alert on/off", example= True)
+    name : str = Field(...,  title="name", description="name of Building", example= "farzad")
+    address : str = Field(...,  title="address", description="address of Building", example= "123 abc")
+    alert_type : int = Field(..., title="alert_type", description="alert on/off/all", example= 1)
     alertEmail : str = Field(...,  title="alertEmail", description="Email for alerts", example= "farzad@gmail.com")
 
 class ResidentInfo(BaseModel):
@@ -177,9 +178,9 @@ def remove_resident(
         resident_id : int = Header(..., description= "Id of Resident")
         ):
     conn = db_connection()
-    # if not check_session(conn,session_token):
-    #     conn.close()
-    #     return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+    if not check_session(conn,session_token):
+        conn.close()
+        return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
     try:
         # delete from RESIDENT_DETAILS table
         sql = f"""DELETE FROM RESIDENT_DETAILS WHERE RESIDENT_ID={resident_id}"""
@@ -215,7 +216,28 @@ def Add_building(
         BuildingInfo: BuildingInfo ,
         session_token: str = Header(..., description= "token for the admin functions")
         ):
-    return JSONResponse(status_code=200,content={"building id":123})
+    try:
+        conn = db_connection()
+        if not check_session(conn,session_token):
+            conn.close()
+            return JSONResponse(status_code=404,content={"massage":"Invalid Session"})
+
+        time_now = datetime.now() 
+        sql = f"""INSERT INTO BUILDING_DETAILS (NAME, ADDRESS, AUTH_USER, NO_OF_RESIDENT, NO_OF_CAMERAS, CREATED_AT, ALERT_TYPE) 
+                VALUES('{BuildingInfo.name}', '{BuildingInfo.address}', 
+                (select USER_NAME from SESSION_DETAIL WHERE SESSION_ID = {session_token}), 
+                0, 0, '{time_now.strftime("%Y-%m-%d %H:%M:%S")}', {BuildingInfo.alert_type}) """
+        conn.execute(sql)
+        row_id = conn.execute("select last_insert_rowid() as id").fetchall()    
+        BUILDING_ID = dict(row_id[0])['id']
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as error:
+        logger.error("Error in add_resident function",error,traceback.print_exc())
+        conn.rollback()
+        conn.close()
+        return JSONResponse(status_code=500,content={"massage":f"Internal Server error {error}"})
+    return JSONResponse(status_code=200,content={"building id":BUILDING_ID})
 
 @app.get('/admin/list_building', summary="list of all building",response_model=rt_BuildingInfo)
 def list_building(
