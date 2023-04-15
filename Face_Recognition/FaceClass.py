@@ -1,5 +1,6 @@
 import cv2
 import face_recognition
+import pickle
 import numpy as np
 
 class FaceClass:
@@ -31,3 +32,12 @@ class FaceClass:
                 # Return the id of the first matching face
                 return matches.index(True)
         return None
+
+def save_model(FaceClassOBJ):
+    with open("Face_Model.obj",'wb') as f:
+        pickle.dump(FaceClassOBJ,f)
+
+def load_model(FaceClassOBJ):
+    with open("Face_Model.obj",'rb') as f:
+        model = pickle.load(f)
+        return model
